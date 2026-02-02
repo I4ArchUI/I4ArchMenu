@@ -14,16 +14,15 @@
 .layout-container {
     display: flex;
     justify-content: center;
-    align-items: flex-start; /* Start from top to allow expansion */
+    align-items: flex-start;
     min-height: 100vh;
     width: 100vw;
-    background-color: transparent; /* Allow body bg to show or use tauri transparent */
-    padding-top: 2vh; /* Search bar closer to top */
+    background-color: transparent;
 }
 
 .layout-content {
     width: 100%;
-    max-width: 750px;
+    max-width: 480px;
     position: relative;
     z-index: 1;
 }

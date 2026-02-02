@@ -1,4 +1,4 @@
-use crate::search::{SearchResult, search_files, search_apps};
+use crate::search::{search_apps, search_files, SearchResult};
 use std::path::PathBuf;
 
 #[tauri::command]
@@ -14,7 +14,7 @@ pub fn search_apps_command(query: String, max_results: usize) -> Vec<SearchResul
 #[tauri::command]
 pub fn open_item(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
-    
+
     if path.ends_with(".desktop") {
         // Launch application from .desktop file
         std::process::Command::new("gtk-launch")
@@ -28,11 +28,27 @@ pub fn open_item(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn exit_app() {
     std::process::exit(0);
+}
+
+#[tauri::command]
+pub fn get_gtk_theme() -> String {
+    let output = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+            // Output is usually "'prefer-dark'" or "'default'" with quotes and newline
+            stdout.trim().replace("'", "")
+        }
+        Err(_) => "default".to_string(), // Fallback
+    }
 }
