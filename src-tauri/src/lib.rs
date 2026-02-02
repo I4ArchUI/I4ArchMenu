@@ -1,5 +1,5 @@
-mod search;
 mod commands;
+mod search;
 
 use commands::*;
 
@@ -11,9 +11,9 @@ pub fn run() {
             search_files_command,
             search_apps_command,
             open_item,
-            exit_app
+            exit_app,
+            get_gtk_theme
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

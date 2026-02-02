@@ -7,6 +7,21 @@ const selectedIndex = ref(0);
 const searchInput = ref<HTMLInputElement | null>(null);
 const isSearching = ref(false);
 
+// Theme management
+const updateTheme = async () => {
+	try {
+		const theme = await invoke<string>('get_gtk_theme');
+		// gsettings returns 'prefer-dark', 'default', or 'prefer-light'
+		if (theme.includes('dark')) {
+			document.documentElement.setAttribute('data-theme', 'dark');
+		} else {
+			document.documentElement.removeAttribute('data-theme');
+		}
+	} catch (e) { }
+};
+
+let themeInterval: any = null;
+
 // Search results from backend
 const fileResults = ref<any[]>([]);
 const appResults = ref<any[]>([]);
@@ -95,7 +110,7 @@ const performSearch = async () => {
 					...r,
 					description: r.path,
 				}));
-			}).catch(err => {
+			}).catch(_err => {
 				appResults.value = [];
 			})
 		);
@@ -110,7 +125,7 @@ const performSearch = async () => {
 					...r,
 					description: r.path,
 				}));
-			}).catch(err => {
+			}).catch(_err => {
 				fileResults.value = [];
 			})
 		);
@@ -146,8 +161,9 @@ const getIconStyle = (item: any) => {
 	if (name.includes('firefox')) return 'color: #ff9500';
 	if (name.includes('code')) return 'color: #007acc';
 	if (name.includes('spotify')) return 'color: #1bd860';
-	if (name.includes('steam')) return 'color: #171a21';
+	if (name.includes('steam')) return 'color: var(--brand-steam)';
 	if (name.includes('discord')) return 'color: #5865F2';
+	// Let others inherit current text color
 	return '';
 };
 
@@ -193,11 +209,14 @@ const onKeydown = (e: KeyboardEvent) => {
 onMounted(() => {
 	window.addEventListener('keydown', onKeydown);
 	if (searchInput.value) searchInput.value.focus();
+	updateTheme();
+	themeInterval = setInterval(updateTheme, 1000);
 });
 
 onUnmounted(() => {
 	window.removeEventListener('keydown', onKeydown);
 	if (searchTimeout) clearTimeout(searchTimeout);
+	if (themeInterval) clearInterval(themeInterval);
 });
 </script>
 
@@ -267,17 +286,17 @@ onUnmounted(() => {
 	width: 100%;
 	height: 100vh;
 	overflow: hidden;
-	font-family: 'Inter', sans-serif;
-	color: white;
+	font-family: var(--font-main);
+	color: var(--text-main);
 }
 
 /* Glass Effect */
 .glass-panel {
-	background: linear-gradient(135deg, rgba(20, 20, 30, 0.85), rgba(30, 30, 40, 0.95));
+	background: var(--bg-glass-gradient);
 	backdrop-filter: blur(40px);
 	-webkit-backdrop-filter: blur(40px);
-	border: 1px solid rgba(255, 255, 255, 0.08);
-	box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+	border: 1px solid var(--border-color);
+	box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
 }
 
 /* Header */
@@ -296,33 +315,34 @@ onUnmounted(() => {
 
 .brand-icon {
 	font-size: 1.2rem;
-	color: rgba(255, 255, 255, 0.9);
+	color: var(--text-main);
+	opacity: 0.9;
 }
 
 .brand-text {
 	font-size: 1.1rem;
 	font-weight: 600;
 	letter-spacing: 0.5px;
-	color: rgba(255, 255, 255, 0.95);
+	color: var(--text-main);
 }
 
 .close-btn {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	background: rgba(255, 255, 255, 0.05);
-	border: 1px solid rgba(255, 255, 255, 0.1);
+	background: var(--close-btn-bg);
+	border: 1px solid var(--border-color);
 	padding: 6px 14px;
 	border-radius: 20px;
-	color: rgba(255, 255, 255, 0.6);
+	color: var(--close-btn-text);
 	font-size: 0.85rem;
 	cursor: pointer;
 	transition: all 0.2s ease;
 }
 
 .close-btn:hover {
-	background: rgba(255, 255, 255, 0.15);
-	color: white;
+	background: var(--close-btn-hover);
+	color: var(--text-main);
 }
 
 /* Search */
@@ -332,22 +352,22 @@ onUnmounted(() => {
 
 .search-input {
 	width: 100%;
-	background: rgba(0, 0, 0, 0.2);
+	background: var(--search-bg);
 	border: none;
 	padding: 12px 16px;
 	border-radius: 12px;
-	color: white;
+	color: var(--text-main);
 	font-size: 0.95rem;
 	outline: none;
 	transition: background 0.2s;
 }
 
 .search-input:focus {
-	background: rgba(0, 0, 0, 0.3);
+	background: var(--search-focus);
 }
 
 .search-input::placeholder {
-	color: rgba(255, 255, 255, 0.2);
+	color: var(--search-placeholder);
 }
 
 /* List */
@@ -368,7 +388,7 @@ onUnmounted(() => {
 	align-items: center;
 	padding: 12px 24px;
 	cursor: pointer;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+	border-bottom: 1px solid var(--border-color);
 	transition: background 0.2s;
 }
 
@@ -378,7 +398,7 @@ onUnmounted(() => {
 
 .app-item:hover,
 .app-item.selected {
-	background: rgba(255, 255, 255, 0.06);
+	background: var(--item-selected);
 }
 
 .app-icon-wrapper {
@@ -387,14 +407,14 @@ onUnmounted(() => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: rgba(255, 255, 255, 0.05);
+	background: var(--icon-bg);
 	border-radius: 10px;
 	margin-right: 16px;
 	font-size: 1.5rem;
 }
 
 .app-icon-main {
-	color: rgba(255, 255, 255, 0.9);
+	color: var(--icon-color);
 }
 
 .app-info {
@@ -407,7 +427,7 @@ onUnmounted(() => {
 .app-title {
 	font-size: 0.95rem;
 	font-weight: 500;
-	color: rgba(255, 255, 255, 0.95);
+	color: var(--text-main);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -415,7 +435,7 @@ onUnmounted(() => {
 
 .app-desc {
 	font-size: 0.8rem;
-	color: rgba(255, 255, 255, 0.5);
+	color: var(--text-secondary);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -428,7 +448,7 @@ onUnmounted(() => {
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.8px;
-	color: rgba(255, 255, 255, 0.4);
+	color: var(--text-muted);
 	margin-top: 4px;
 }
 
@@ -447,7 +467,7 @@ onUnmounted(() => {
 	align-items: center;
 	justify-content: center;
 	height: 100px;
-	color: rgba(255, 255, 255, 0.3);
+	color: var(--text-muted);
 	font-size: 0.9rem;
 }
 
@@ -461,15 +481,16 @@ onUnmounted(() => {
 }
 
 .custom-scroll::-webkit-scrollbar-track {
-	background: transparent;
+	background: var(--scrollbar-track);
 }
 
 .custom-scroll::-webkit-scrollbar-thumb {
-	background: rgba(255, 255, 255, 0.1);
+	background: var(--scrollbar-thumb);
 	border-radius: 4px;
 }
 
 .custom-scroll::-webkit-scrollbar-thumb:hover {
-	background: rgba(255, 255, 255, 0.2);
+	background: var(--scrollbar-thumb);
+	opacity: 0.8;
 }
 </style>
