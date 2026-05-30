@@ -48,8 +48,9 @@ const groupedResults = computed(() => {
 			label: 'Web Search',
 			items: [{
 				type: 'web',
+				item_type: 'web',
 				name: `Search Google for "${searchQuery.value}"`,
-				description: 'Open in browser',
+				description: 'Open search query in default web browser',
 				icon: 'pi pi-google',
 				action: () => {
 					invoke('open_item', { path: `https://www.google.com/search?q=${encodeURIComponent(searchQuery.value)}` });
@@ -100,16 +101,21 @@ const performSearch = async () => {
 	try {
 		const promises = [];
 
-		// Always search Apps
+		// Always search Apps (both System and Flatpak)
 		promises.push(
 			invoke<any[]>('search_apps_command', {
 				query: searchQuery.value,
 				maxResults: 20
 			}).then(results => {
-				appResults.value = results.map(r => ({
-					...r,
-					description: r.path,
-				}));
+				appResults.value = results.map(r => {
+					const filename = r.path.split('/').pop()?.replace('.desktop', '') || r.path;
+					return {
+						...r,
+						description: r.item_type === 'flatpak' 
+							? `Flatpak App • ${filename}` 
+							: `System App • ${filename}`,
+					};
+				});
 			}).catch(_err => {
 				appResults.value = [];
 			})
@@ -121,10 +127,13 @@ const performSearch = async () => {
 				query: searchQuery.value,
 				maxResults: 10
 			}).then(results => {
-				fileResults.value = results.map(r => ({
-					...r,
-					description: r.path,
-				}));
+				fileResults.value = results.map(r => {
+					const label = r.item_type === 'folder' ? 'Folder' : 'File';
+					return {
+						...r,
+						description: `${label} • ${r.path}`,
+					};
+				});
 			}).catch(_err => {
 				fileResults.value = [];
 			})
@@ -154,17 +163,17 @@ const exitApp = () => {
 	invoke('exit_app');
 }
 
-const getIconStyle = (item: any) => {
-	if (item.type === 'web') return 'color: #4285F4';
-	if (!item.name) return '';
-	const name = item.name.toLowerCase();
-	if (name.includes('firefox')) return 'color: #ff9500';
-	if (name.includes('code')) return 'color: #007acc';
-	if (name.includes('spotify')) return 'color: #1bd860';
-	if (name.includes('steam')) return 'color: var(--brand-steam)';
-	if (name.includes('discord')) return 'color: #5865F2';
-	// Let others inherit current text color
-	return '';
+const getBadgeLabel = (type: string) => {
+	if (type === 'flatpak') return 'Flatpak';
+	if (type === 'app') return 'System';
+	if (type === 'file') return 'File';
+	if (type === 'folder') return 'Folder';
+	if (type === 'web') return 'Web';
+	return type;
+};
+
+const getIconStyle = (_item: any) => {
+	return 'color: #e5c197'; // Only use premium yellow/amber
 };
 
 // Scroll to selected
@@ -229,15 +238,18 @@ onUnmounted(() => {
 				<span class="brand-text">Applications</span>
 			</div>
 			<button class="close-btn" @click="exitApp">
-				<i class="pi pi-times" style="font-size: 0.7rem;"></i>
+				<i class="pi pi-times" style="font-size: 0.75rem;"></i>
 				<span>Close</span>
 			</button>
 		</header>
 
 		<!-- Search Area -->
 		<div class="search-container">
-			<input ref="searchInput" v-model="searchQuery" type="text" class="search-input"
-				placeholder="Type to search..." @input="onSearchInput" />
+			<div class="search-wrapper">
+				<i class="pi pi-search search-bar-icon"></i>
+				<input ref="searchInput" v-model="searchQuery" type="text" class="search-input"
+					placeholder="Type to search apps, files or web..." @input="onSearchInput" />
+			</div>
 		</div>
 
 		<!-- Content List -->
@@ -258,7 +270,10 @@ onUnmounted(() => {
 								<i :class="item.icon" class="app-icon-main" :style="getIconStyle(item)"></i>
 							</div>
 							<div class="app-info">
-								<div class="app-title">{{ item.name }}</div>
+								<div class="app-title-row">
+									<span class="app-title">{{ item.name }}</span>
+									<span :class="['item-badge', item.item_type]">{{ getBadgeLabel(item.item_type) }}</span>
+								</div>
 								<div class="app-desc">{{ item.description }}</div>
 							</div>
 						</li>
@@ -292,11 +307,22 @@ onUnmounted(() => {
 
 /* Glass Effect */
 .glass-panel {
-	background: var(--bg-glass-gradient);
-	backdrop-filter: blur(40px);
-	-webkit-backdrop-filter: blur(40px);
-	border: 1px solid var(--border-color);
-	box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
+	background: rgba(245, 240, 230, 0.88); /* More solid light glass, less transparent */
+	backdrop-filter: blur(20px) saturate(140%);
+	-webkit-backdrop-filter: blur(20px) saturate(140%);
+	border: 1px solid rgba(229, 193, 151, 0.35); /* Slightly more defined yellow border */
+	box-shadow: 
+		0 20px 40px rgba(0, 0, 0, 0.08), 
+		inset 0 1px 0 rgba(255, 255, 255, 0.5); /* Highlight at top */
+	border-radius: 20px;
+}
+
+:root[data-theme="dark"] .glass-panel {
+	background: rgba(22, 20, 16, 0.88); /* More solid dark smoked glass, less transparent */
+	border: 1px solid rgba(229, 193, 151, 0.22);
+	box-shadow: 
+		0 30px 60px rgba(0, 0, 0, 0.4), 
+		inset 0 1px 0 rgba(255, 255, 255, 0.08); /* Highlight at top */
 }
 
 /* Header */
@@ -314,35 +340,36 @@ onUnmounted(() => {
 }
 
 .brand-icon {
-	font-size: 1.2rem;
-	color: var(--text-main);
-	opacity: 0.9;
+	font-size: 1.3rem;
+	color: #e5c197; /* Premium Amber/Yellow */
+	filter: drop-shadow(0 0 8px rgba(229, 193, 151, 0.35));
 }
 
 .brand-text {
-	font-size: 1.1rem;
-	font-weight: 600;
+	font-size: 1.15rem;
+	font-weight: 700;
 	letter-spacing: 0.5px;
-	color: var(--text-main);
+	color: #e5c197; /* Solid yellow, no gradient */
 }
 
 .close-btn {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	background: var(--close-btn-bg);
-	border: 1px solid var(--border-color);
+	background: rgba(229, 193, 151, 0.08); /* Translucent yellow background */
+	border: 1px solid rgba(229, 193, 151, 0.2);
 	padding: 6px 14px;
 	border-radius: 20px;
-	color: var(--close-btn-text);
+	color: #e5c197; /* Yellow */
 	font-size: 0.85rem;
 	cursor: pointer;
 	transition: all 0.2s ease;
 }
 
 .close-btn:hover {
-	background: var(--close-btn-hover);
-	color: var(--text-main);
+	background: rgba(229, 193, 151, 0.16);
+	color: #e5c197;
+	box-shadow: 0 0 10px rgba(229, 193, 151, 0.15);
 }
 
 /* Search */
@@ -350,20 +377,46 @@ onUnmounted(() => {
 	padding: 10px 24px;
 }
 
+.search-wrapper {
+	position: relative;
+	width: 100%;
+}
+
+.search-bar-icon {
+	position: absolute;
+	left: 16px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--text-muted);
+	font-size: 1rem;
+	pointer-events: none;
+}
+
 .search-input {
 	width: 100%;
-	background: var(--search-bg);
-	border: none;
-	padding: 12px 16px;
-	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.03); /* Glass input */
+	border: 1px solid rgba(229, 193, 151, 0.12);
+	padding: 14px 18px 14px 44px; /* Space for search icon */
+	border-radius: 14px;
 	color: var(--text-main);
 	font-size: 0.95rem;
 	outline: none;
-	transition: background 0.2s;
+	transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme="dark"] .search-input {
+	background: rgba(0, 0, 0, 0.15);
 }
 
 .search-input:focus {
-	background: var(--search-focus);
+	background: rgba(255, 255, 255, 0.06);
+	border-color: #e5c197; /* Yellow focus border */
+	box-shadow: 0 0 16px rgba(229, 193, 151, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme="dark"] .search-input:focus {
+	background: rgba(0, 0, 0, 0.22);
 }
 
 .search-input::placeholder {
@@ -389,16 +442,36 @@ onUnmounted(() => {
 	padding: 12px 24px;
 	cursor: pointer;
 	border-bottom: 1px solid var(--border-color);
-	transition: background 0.2s;
+	transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	position: relative;
+	overflow: hidden;
+}
+
+.app-item::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: #e5c197; /* Yellow active indicator */
+	transform: scaleY(0);
+	transition: transform 0.25s ease;
+}
+
+.app-item.selected::before,
+.app-item:hover::before {
+	transform: scaleY(1);
 }
 
 .app-item:last-child {
 	border-bottom: none;
 }
 
-.app-item:hover,
-.app-item.selected {
-	background: var(--item-selected);
+.app-item.selected,
+.app-item:hover {
+	background: rgba(229, 193, 151, 0.06); /* Soft glass reflection with yellow tint */
+	transform: translateX(4px);
 }
 
 .app-icon-wrapper {
@@ -407,10 +480,19 @@ onUnmounted(() => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--icon-bg);
-	border-radius: 10px;
+	background: rgba(229, 193, 151, 0.05);
+	border: 1px solid rgba(229, 193, 151, 0.08);
+	border-radius: 12px;
 	margin-right: 16px;
-	font-size: 1.5rem;
+	font-size: 1.4rem;
+	transition: all 0.25s ease;
+}
+
+.app-item.selected .app-icon-wrapper,
+.app-item:hover .app-icon-wrapper {
+	transform: scale(1.05);
+	background: rgba(229, 193, 151, 0.1);
+	border-color: rgba(229, 193, 151, 0.2);
 }
 
 .app-icon-main {
@@ -422,11 +504,19 @@ onUnmounted(() => {
 	flex-direction: column;
 	gap: 4px;
 	overflow: hidden;
+	flex: 1;
+}
+
+.app-title-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding-right: 8px;
 }
 
 .app-title {
 	font-size: 0.95rem;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--text-main);
 	white-space: nowrap;
 	overflow: hidden;
@@ -439,17 +529,31 @@ onUnmounted(() => {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	opacity: 0.85;
+}
+
+/* Unified Premium Yellow Badges */
+.item-badge {
+	font-size: 9px;
+	font-weight: 700;
+	padding: 2px 7px;
+	border-radius: 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	background: rgba(229, 193, 151, 0.12);
+	color: #e5c197;
+	border: 1px solid rgba(229, 193, 151, 0.22);
 }
 
 /* Group Headers */
 .group-title {
 	padding: 12px 24px 6px 24px;
 	font-size: 0.7rem;
-	font-weight: 600;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.8px;
 	color: var(--text-muted);
-	margin-top: 4px;
+	margin-top: 6px;
 }
 
 .result-group:first-child .group-title {
@@ -468,7 +572,7 @@ onUnmounted(() => {
 	justify-content: center;
 	height: 100px;
 	color: var(--text-muted);
-	font-size: 0.9rem;
+	font-size: 0.95rem;
 }
 
 .empty-state {
@@ -494,3 +598,4 @@ onUnmounted(() => {
 	opacity: 0.8;
 }
 </style>
+

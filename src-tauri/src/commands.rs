@@ -16,9 +16,38 @@ pub fn open_item(path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
 
     if path.ends_with(".desktop") {
-        // Launch application from .desktop file
+        let file_stem = path_buf.file_stem().unwrap_or_default().to_string_lossy().to_string();
+
+        // 1. Try launching Flatpak apps directly via 'flatpak run'
+        if path.contains("flatpak") {
+            if std::process::Command::new("flatpak")
+                .args(["run", &file_stem])
+                .spawn()
+                .is_ok() {
+                return Ok(());
+            }
+        }
+
+        // 2. Parse the desktop file content to run the command directly
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Some(exec_line) = parse_exec_command(&content) {
+                let clean_cmd = clean_exec_line(&exec_line);
+                let parts: Vec<&str> = clean_cmd.split_whitespace().collect();
+                if !parts.is_empty() {
+                    let mut cmd = std::process::Command::new(parts[0]);
+                    if parts.len() > 1 {
+                        cmd.args(&parts[1..]);
+                    }
+                    if cmd.spawn().is_ok() {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to standard gtk-launch
         std::process::Command::new("gtk-launch")
-            .arg(path_buf.file_stem().unwrap_or_default())
+            .arg(&file_stem)
             .spawn()
             .map_err(|e| e.to_string())?;
     } else {
@@ -30,6 +59,23 @@ pub fn open_item(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn parse_exec_command(content: &str) -> Option<String> {
+    for line in content.lines() {
+        if line.starts_with("Exec=") {
+            return Some(line.trim_start_matches("Exec=").to_string());
+        }
+    }
+    None
+}
+
+fn clean_exec_line(exec: &str) -> String {
+    let mut clean = exec.to_string();
+    for placeholder in &["%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", "%c", "%k", "%v"] {
+        clean = clean.replace(placeholder, "");
+    }
+    clean.trim().to_string()
 }
 
 #[tauri::command]
